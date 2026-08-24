@@ -1,0 +1,362 @@
+name: Deploy NestJS Backend
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # =========================================================
+      # 1. Checkout source code
+      # =========================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # =========================================================
+      # 2. Setup Node.js on GitHub Actions runner
+      # =========================================================
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # =========================================================
+      # 3. Install dependencies
+      # =========================================================
+      - name: Install dependencies
+        run: npm ci
+
+      # =========================================================
+      # 4. Build NestJS application
+      # =========================================================
+      - name: Build NestJS application
+        run: npm run build
+
+      # =========================================================
+      # 5. Prepare deployment package
+      # =========================================================
+      - name: Prepare deployment package
+        run: |
+          rm -rf deploy
+          mkdir -p deploy
+
+          cp -r dist deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+
+      # =========================================================
+      # 6. Configure SSH
+      # =========================================================
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      # =========================================================
+      # 7. Setup VPS
+      #
+      # Installs:
+      #   - curl
+      #   - Node.js 22
+      #   - PM2
+      # =========================================================
+      - name: Setup VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
+
+            set -e
+
+            echo "=========================================="
+            echo "Checking VPS requirements"
+            echo "=========================================="
+
+            # ---------------------------------------------------
+            # Install curl if missing
+            # ---------------------------------------------------
+            if ! command -v curl >/dev/null 2>&1; then
+              echo "curl not found. Installing curl..."
+
+              sudo apt-get update
+              sudo apt-get install -y curl
+            fi
+
+            # ---------------------------------------------------
+            # Check Node.js
+            # ---------------------------------------------------
+            NODE_REQUIRED_MAJOR=22
+
+            if command -v node >/dev/null 2>&1; then
+
+              CURRENT_NODE_MAJOR=$(node -v | sed 's/v//' | cut -d. -f1)
+
+              echo "Current Node.js version: $(node -v)"
+
+              if [ "$CURRENT_NODE_MAJOR" -lt "$NODE_REQUIRED_MAJOR" ]; then
+
+                echo "Node.js version is older than 22."
+                echo "Installing Node.js 22..."
+
+                curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+                sudo apt-get install -y nodejs
+
+              fi
+
+            else
+
+              echo "Node.js is not installed."
+              echo "Installing Node.js 22..."
+
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+
+            fi
+
+            echo "Node.js version:"
+            node -v
+
+            echo "npm version:"
+            npm -v
+
+            # ---------------------------------------------------
+            # Check PM2
+            # ---------------------------------------------------
+            if command -v pm2 >/dev/null 2>&1; then
+
+              echo "PM2 is already installed."
+              pm2 -v
+
+            else
+
+              echo "PM2 is not installed."
+              echo "Installing PM2..."
+
+              sudo npm install -g pm2
+
+              echo "PM2 installed:"
+              pm2 -v
+
+            fi
+
+            # ---------------------------------------------------
+            # Create application directory
+            # ---------------------------------------------------
+            APP_DIR="/home/${{ secrets.VPS_USER }}/nestjs-backend"
+
+            echo "Application directory:"
+            echo "$APP_DIR"
+
+            mkdir -p "$APP_DIR"
+
+            # ---------------------------------------------------
+            # Create temporary deployment directory
+            # ---------------------------------------------------
+            rm -rf /tmp/nestjs-deploy
+            mkdir -p /tmp/nestjs-deploy
+
+            echo "VPS setup completed."
+
+          EOF
+
+      # =========================================================
+      # 8. Upload build files to VPS
+      # =========================================================
+      - name: Upload application
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -r deploy/* \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/nestjs-deploy/"
+
+      # =========================================================
+      # 9. Deploy application
+      # =========================================================
+      - name: Deploy NestJS application
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
+
+            set -e
+
+            APP_DIR="/home/${{ secrets.VPS_USER }}/nestjs-backend"
+
+            echo "=========================================="
+            echo "Deploying NestJS application"
+            echo "=========================================="
+
+            # ---------------------------------------------------
+            # Create application directory
+            # ---------------------------------------------------
+            mkdir -p "$APP_DIR"
+
+            # ---------------------------------------------------
+            # Remove old build
+            # ---------------------------------------------------
+            echo "Removing old dist..."
+
+            rm -rf "$APP_DIR/dist"
+
+            # ---------------------------------------------------
+            # Copy new build
+            # ---------------------------------------------------
+            echo "Copying new dist..."
+
+            cp -r /tmp/nestjs-deploy/dist "$APP_DIR/"
+
+            # ---------------------------------------------------
+            # Copy package files
+            # ---------------------------------------------------
+            cp /tmp/nestjs-deploy/package.json "$APP_DIR/"
+            cp /tmp/nestjs-deploy/package-lock.json "$APP_DIR/"
+
+            cd "$APP_DIR"
+
+            # ---------------------------------------------------
+            # Install production dependencies
+            # ---------------------------------------------------
+            echo "Installing production dependencies..."
+
+            npm ci --omit=dev
+
+            # ---------------------------------------------------
+            # Create production .env
+            # ---------------------------------------------------
+            echo "Creating production environment file..."
+
+            cat > "$APP_DIR/.env" << 'ENVFILE'
+          ${{ secrets.DATABASE_URL }}
+          ${{ secrets.JWT_SECRET }}
+          ${{ secrets.NEROTIX_BASE_URL }}
+          ${{ secrets.NEROTIX_TOKEN }}
+          ${{ secrets.PORT }}
+          ${{ secrets.RAZORPAY_KEY_ID }}
+          ${{ secrets.RAZORPAY_KEY_SECRET }}
+          ${{ secrets.SMTP_FROM }}
+          ${{ secrets.SMTP_HOST }}
+          ${{ secrets.SMTP_PASS }}
+          ${{ secrets.SMTP_PORT }}
+          ${{ secrets.SMTP_USER }}
+          ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          ENVFILE
+
+            chmod 600 "$APP_DIR/.env"
+
+            # ---------------------------------------------------
+            # Start or restart PM2 application
+            # ---------------------------------------------------
+            echo "Starting/restarting NestJS application..."
+
+            if pm2 describe nestjs-backend >/dev/null 2>&1; then
+
+              echo "Existing PM2 process found."
+              echo "Restarting application..."
+
+              pm2 restart nestjs-backend --update-env
+
+            else
+
+              echo "No existing PM2 process found."
+              echo "Starting application..."
+
+              pm2 start dist/main.js \
+                --name nestjs-backend \
+                --time
+
+            fi
+
+            # ---------------------------------------------------
+            # Save PM2 process list
+            # ---------------------------------------------------
+            pm2 save
+
+            # ---------------------------------------------------
+            # Show PM2 status
+            # ---------------------------------------------------
+            echo "=========================================="
+            echo "PM2 Status"
+            echo "=========================================="
+
+            pm2 status
+
+            # ---------------------------------------------------
+            # Clean temporary deployment files
+            # ---------------------------------------------------
+            rm -rf /tmp/nestjs-deploy
+
+            echo "=========================================="
+            echo "Deployment completed successfully"
+            echo "=========================================="
+
+          EOF
+
+      # =========================================================
+      # 10. Verify deployment
+      # =========================================================
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
+
+            set -e
+
+            echo "=========================================="
+            echo "Verifying deployment"
+            echo "=========================================="
+
+            APP_DIR="/home/${{ secrets.VPS_USER }}/nestjs-backend"
+
+            if [ ! -f "$APP_DIR/dist/main.js" ]; then
+              echo "ERROR: dist/main.js does not exist."
+              exit 1
+            fi
+
+            if [ ! -f "$APP_DIR/.env" ]; then
+              echo "ERROR: .env does not exist."
+              exit 1
+            fi
+
+            if ! pm2 describe nestjs-backend >/dev/null 2>&1; then
+              echo "ERROR: PM2 application does not exist."
+              exit 1
+            fi
+
+            STATUS=$(pm2 jlist | node -e "
+              let data = '';
+              process.stdin.on('data', chunk => data += chunk);
+              process.stdin.on('end', () => {
+                const apps = JSON.parse(data);
+                const app = apps.find(a => a.name === 'nestjs-backend');
+
+                if (!app) {
+                  process.exit(1);
+                }
+
+                console.log(app.pm2_env.status);
+              });
+            ")
+
+            echo "Application status: $STATUS"
+
+            if [ "$STATUS" != "online" ]; then
+              echo "ERROR: NestJS application is not online."
+              pm2 logs nestjs-backend --lines 50 --nostream
+              exit 1
+            fi
+
+            echo "=========================================="
+            echo "Deployment verification successful"
+            echo "=========================================="
+
+          EOF
