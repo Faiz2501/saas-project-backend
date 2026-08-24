@@ -154,7 +154,7 @@ jobs:
             # ---------------------------------------------------
             # Create application directory
             # ---------------------------------------------------
-            APP_DIR="/home/${{ secrets.VPS_USER }}/nestjs-backend"
+            APP_DIR="$HOME/nestjs-backend"
 
             echo "Application directory:"
             echo "$APP_DIR"
