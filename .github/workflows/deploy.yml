@@ -236,19 +236,19 @@ jobs:
             echo "Creating production environment file..."
 
             cat > "$APP_DIR/.env" << 'ENVFILE'
-          ${{ secrets.DATABASE_URL }}
-          ${{ secrets.JWT_SECRET }}
-          ${{ secrets.NEROTIX_BASE_URL }}
-          ${{ secrets.NEROTIX_TOKEN }}
-          ${{ secrets.PORT }}
-          ${{ secrets.RAZORPAY_KEY_ID }}
-          ${{ secrets.RAZORPAY_KEY_SECRET }}
-          ${{ secrets.SMTP_FROM }}
-          ${{ secrets.SMTP_HOST }}
-          ${{ secrets.SMTP_PASS }}
-          ${{ secrets.SMTP_PORT }}
-          ${{ secrets.SMTP_USER }}
-          ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          NEROTIX_BASE_URL=${{ secrets.NEROTIX_BASE_URL }}
+          NEROTIX_TOKEN=${{ secrets.NEROTIX_TOKEN }}
+          PORT=${{ secrets.PORT }}
+          RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}
+          SMTP_FROM=${{ secrets.SMTP_FROM }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PASS=${{ secrets.SMTP_PASS }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           ENVFILE
 
             chmod 600 "$APP_DIR/.env"
