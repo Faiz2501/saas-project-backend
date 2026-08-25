@@ -68,16 +68,16 @@ jobs:
       - name: Add VM to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: Copy build files to VM
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           source: 'deploy-package/*'
-          target: '/home/${{ secrets.VM_USER }}/app-releases/latest'
+          target: '/home/${{ secrets.VPS_USER }}/app-releases/latest'
           strip_components: 1
           overwrite: true
 
@@ -102,9 +102,9 @@ jobs:
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           envs: DATABASE_URL,JWT_SECRET,NEROTIX_BASE_URL,NEROTIX_TOKEN,PORT,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET,SMTP_FROM,SMTP_HOST,SMTP_PASS,SMTP_PORT,SMTP_USER
           script: |
             set -e
@@ -130,7 +130,7 @@ jobs:
               echo "PM2 already installed."
             fi
 
-            APP_DIR="/home/${{ secrets.VM_USER }}/app-releases/latest"
+            APP_DIR="/home/${{ secrets.VPS_USER }}/app-releases/latest"
             cd "$APP_DIR"
 
             echo "Writing .env file..."
