@@ -152,7 +152,7 @@ jobs:
             EOF
 
             echo "Installing production dependencies..."
-            npm ci --omit=dev
+            npm ci
 
             echo "Restarting app with PM2..."
             if pm2 describe nestjs-app > /dev/null 2>&1; then
