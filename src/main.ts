@@ -9,7 +9,7 @@ async function bootstrap() {
 
   const allowedOrigins = (
     process.env.CORS_ORIGINS ??
-    'http://localhost:3001,http://localhost:5173,http://localhost:3000,https://hankie-paralegal-apple.ngrok-free.dev,https://bernadette-longitudinal-sheila.ngrok-free.dev'
+    'http://localhost:3001,http://localhost:5173,http://localhost:3000,https://app.idproofpro.com,https://hankie-paralegal-apple.ngrok-free.dev,https://bernadette-longitudinal-sheila.ngrok-free.dev'
   )
     .split(',')
     .map((origin) => origin.trim())
